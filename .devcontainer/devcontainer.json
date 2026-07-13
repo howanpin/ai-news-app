@@ -1,0 +1,21 @@
+{
+    "name": "AI News App Development",
+    // 既存のDockerfileを使ってコンテナを構成する
+    "build": {
+        "dockerfile": "../Dockerfile"
+    },
+    // コンテナ内で使いたいVS Codeの拡張機能（Python用）を自動インストール
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "ms-python.python",
+                "ms-python.vscode-pylance"
+            ]
+        }
+    },
+    // コンテナ起動後に実行したいコマンド（あれば）
+    // "postCreateCommand": "pip install -r requirements.txt",
+
+    // リモートユーザー（通常はrootでOK）
+    "remoteUser": "root"
+}

@@ -1,0 +1,13 @@
+# Pythonが自動生成するキャッシュファイル
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+
+# 環境変数
+.env
+
+# OSが勝手に作るゴミファイル
+.DS_Store
+Thumbs.db

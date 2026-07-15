@@ -13,9 +13,8 @@
             ]
         }
     },
-    // コンテナ起動後に実行したいコマンド（あれば）
+    // コンテナ起動後に実行したいコマンド
     "postCreateCommand": "pip install -r requirements.txt",
-
-    // リモートユーザー（通常はrootでOK）
+    // リモートユーザー
     "remoteUser": "root"
 }

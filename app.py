@@ -3,6 +3,7 @@ import sys
 import time
 import requests
 from dotenv import load_dotenv
+from pathlib import Path
 from datetime import datetime
 from tavily import TavilyClient
 from google import genai
@@ -10,27 +11,21 @@ from google.genai import types
 
 # 各種設定値
 load_dotenv()
-AI_API_KEY = os.getenv("AI_API_KEY")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
 DISCORD_WEBHOOK = os.getenv("DISCORD_WEBHOOK")
+USER_PROFILE = Path(os.getenv("USER_PROFILE_PATH")).read_text(encoding = "utf-8")
 CURRENT_DATE = datetime.now().strftime("%Y年%m月%d日")
 
 # APIクライアント
-AI_CLIENT = genai.Client(api_key=AI_API_KEY)
+GEMINI_CLIENT = genai.Client(api_key=GEMINI_API_KEY)
 SEARCH_CLIENT = TavilyClient(api_key=TAVILY_API_KEY)
 
-# ユーザーの好み・プロンプト
-USER_PROFILE = """
-    【ユーザープロフィール】
-    - 年齢・職種: 2001年生まれのITエンジニア
-    - 関心のある技術分野: 
-        - ソフトウェアアーキテクチャ、クリーンコード、DDD（ドメイン駆動設計）
-        - バックエンド開発（Java, Python）
-    - その他の趣味: ウェイトトレーニング（ベンチプレスなど）、ボディメイク・栄養管理
-    """
+# プロンプト
 PROMPT = f"""
     あなたは優秀なITアシスタントです。
-    以下のユーザープロフィールに基づき、この人が今日最も興味を持ちそうな最新のニュースや技術動向、トピックを【10個】ピックアップして、
+    以下のユーザープロフィールに基づき、
+    この人が今日最も興味を持ちそうな最新のニュースやトピックを【10個】【関心を幅広くカバーするように】ピックアップして、
     2000文字以内で要約してください。
 
     {USER_PROFILE}
@@ -44,6 +39,7 @@ PROMPT = f"""
     
     ■ [タイトル]
     - 概要: （3行程度で分かりやすく要約）
+    - 出典URL：(必ず記載)
     - なぜおすすめか: （ユーザーの興味とどう関連しているか）
     """
 
@@ -59,12 +55,13 @@ def web_search(query: str, max_results: int = 5) -> dict:
     Returns:
         渡したクエリと、検索結果（タイトル・URL・要約）のリスト
     """
+    # 検索
     response = SEARCH_CLIENT.search(
         query=query,
         max_results=max_results,
         search_depth="basic",
     )
-    # Geminiに返すのは軽量なJSONにしておく（タイトル・URL・要約のみ）
+    # タイトル・URL・要約を結果として返却
     results = [
         {
             "title": r.get("title"),
@@ -76,7 +73,7 @@ def web_search(query: str, max_results: int = 5) -> dict:
     return {"query": query, "results": results}
 
 
-# 検索機能（function calling）
+# Geminiがツールとして呼び出す機能を定義
 search_function_declaration = types.FunctionDeclaration(
     name="web_search",
     description=(
@@ -101,7 +98,7 @@ search_function_declaration = types.FunctionDeclaration(
     ),
 )
 tools = types.Tool(function_declarations=[search_function_declaration])
-# 実際に呼び出す関数名 -> Python関数のマッピング
+# 機能名とメソッドのマッピング
 AVAILABLE_FUNCTIONS = {
     "web_search": web_search,
 }
@@ -116,7 +113,7 @@ def send_to_discord(webhook_url: str, content: str):
         webhook_url: 送信宛先のWebHookURL
         content: 送信内容
     """
-    # discordは一度に2000字以上送れないので分割送信する
+    # discordは一度に2000字以上送れないため、1900字ずつ分割送信する
     chunk_length = 1900
     for i in range(0, len(content), chunk_length):
         chunk = content[i : i + chunk_length]
@@ -127,8 +124,9 @@ def send_to_discord(webhook_url: str, content: str):
             print(f"Discord送信エラー: {response.status_code} {response.text}")
 
 
-def ask_ai():
+def ask_gemini():
 
+    # 送信内容に最初の指示を設定
     contents = [
         types.Content(
             role="user",
@@ -136,48 +134,48 @@ def ask_ai():
         )
     ]
 
-    max_attempt_count = 5
-    current_attempt_count = 1
-
+    MAX_ATTEMPT_COUNT = 5
+    CURRENT_ATTEMPT_COUNT = 0
     try:
-        # ツール呼び出し（fuction calling）が終わるまでGeminiに聞く
-        while current_attempt_count <= max_attempt_count:
+        # ツール呼び出しが終わるまでGeminiに聞く
+        while CURRENT_ATTEMPT_COUNT < MAX_ATTEMPT_COUNT:
 
-            response = AI_CLIENT.models.generate_content(
+            response = GEMINI_CLIENT.models.generate_content(
                 model="gemini-3.1-flash-lite",
                 contents=contents,
                 config=genai.types.GenerateContentConfig(
                     tools=[tools],
                     tool_config=types.ToolConfig(
-                        function_calling_config=types.FunctionCallingConfig(mode="ANY")
+                        function_calling_config=types.FunctionCallingConfig(mode="ANY") #AUTOだと全く使わなくなるので、必ず使わせる
                     ),
                 ),
             )
 
-            # ツール呼び出しなし時
+            # 最大試行回数以内で最終回答を得られた場合、終了
             if not response.function_calls:
                 return response.text
 
-            # ツール呼び出しあり時
-            print(f"検索{current_attempt_count}回目")
-            # 履歴へ追加
+            # ツールを実行する場合
+            print(f"検索{CURRENT_ATTEMPT_COUNT+1}回目")
+
+            # 送信内容にGeminiからの応答を追加
             contents.append(
                 types.Content(
                     role="model",
                     parts=response.candidates[0].content.parts,
                 )
             )
-            # ツール呼び出し実行
+
+            # ツール実行
             for call in response.function_calls:
                 print(call.args)
+                # 未定義の機能を実行しようとした場合はエラー
                 func = AVAILABLE_FUNCTIONS.get(call.name)
-
                 if func is None:
                     raise Exception(f"未定義function: {call.name}")
 
+                # 送信内容にツールの実行結果を追加
                 result = func(**call.args)
-
-                # 実行結果をGeminiへ返す
                 contents.append(
                     types.Content(
                         role="tool",
@@ -191,9 +189,9 @@ def ask_ai():
                         ],
                     )
                 )
-                current_attempt_count += 1
+                CURRENT_ATTEMPT_COUNT += 1
 
-        # 最大回数到達
+        # 最大試行回数に到達した場合はその旨を伝え、最終回答を生成させて返却
         contents.append(
             types.Content(
                 role="user",
@@ -208,8 +206,7 @@ def ask_ai():
                 ],
             )
         )
-        # 最大回数まで検索した結果をもとに、最終回答を生成・返却
-        response = AI_CLIENT.models.generate_content(
+        response = GEMINI_CLIENT.models.generate_content(
             model="gemini-3.1-flash-lite",
             contents=contents,
             config=genai.types.GenerateContentConfig(tools=[]),
@@ -217,38 +214,37 @@ def ask_ai():
         return response.text
 
     except Exception as e:
-        # エラーログ吐き出し・呼び出し元に異常終了ステータス返却で終了
-        print(f"AIのAPI呼び出し中にエラーが発生しました: {e}", file=sys.stderr)
+        print(f"GeminiのAPI呼び出し中にエラーが発生しました: {e}", file=sys.stderr)
         sys.exit(1)
 
 
 def main():
 
-    retry_count = 0
-    retry_max_count = 5
+    MAX_RETRY_COUNT = 5
+    CURRENT_RETRY_COUNT = 0
 
-    while retry_count < retry_max_count:
+    while CURRENT_RETRY_COUNT < MAX_RETRY_COUNT:
 
         try:
-            # AIにニュースを取得してもらう
-            result_text = ask_ai()
+            # ニュースを取得・要約してもらう
+            result_text = ask_gemini()
             print(result_text)
 
             # discordへ通知
             send_to_discord(DISCORD_WEBHOOK, result_text)
 
-            return  # 成功したら終了
-
+            return
         except Exception as e:
 
-            retry_count += 1
+            CURRENT_RETRY_COUNT += 1
 
-            print(f"処理失敗 {retry_count}/{retry_max_count}: {e}")
-            ## 少し待機してから再実行
-            time.sleep(2**retry_count)
-
-            if retry_count >= retry_max_count:
+            print(f"処理失敗 {CURRENT_RETRY_COUNT}/{MAX_RETRY_COUNT}: {e}")
+ 
+            # リトライ回数制限内であれば、少し待機してから再実行する
+            if CURRENT_RETRY_COUNT >= MAX_RETRY_COUNT:
                 raise
+
+            time.sleep(2**CURRENT_RETRY_COUNT)
 
 
 # エントリポイント

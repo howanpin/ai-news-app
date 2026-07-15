@@ -11,3 +11,6 @@ __pycache__/
 # OSが勝手に作るゴミファイル
 .DS_Store
 Thumbs.db
+
+# その他
+user_profile_local.md

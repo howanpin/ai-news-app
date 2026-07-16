@@ -78,8 +78,8 @@ search_function_declaration = types.FunctionDeclaration(
     name="web_search",
     description=(
         "現在の情報を取得するためのWeb検索機能です。"
-        "検索クエリには過去の知識カットオフ年ではなく、"
-        "現在の日付を基準にした年を使用してください。"
+        "検索クエリには過去の知識カットオフ時点ではなく、"
+        "現在の日付を基準にした時点を使用してください。"
         "最新ニュース、リリース情報、アップデート情報を調査する場合は必ず使用してください。"
     ),
     parameters=types.Schema(

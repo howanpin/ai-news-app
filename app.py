@@ -122,6 +122,7 @@ def send_to_discord(webhook_url: str, content: str):
         time.sleep(0.5)
         if response.status_code not in (200, 204):
             print(f"Discord送信エラー: {response.status_code} {response.text}")
+            raise RuntimeError("Discord送信時にエラーが発生しました")
 
 
 def ask_gemini():
@@ -215,7 +216,7 @@ def ask_gemini():
 
     except Exception as e:
         print(f"GeminiのAPI呼び出し中にエラーが発生しました: {e}", file=sys.stderr)
-        sys.exit(1)
+        raise
 
 
 def main():
@@ -240,9 +241,10 @@ def main():
 
             print(f"処理失敗 {CURRENT_RETRY_COUNT}/{MAX_RETRY_COUNT}: {e}")
  
-            # リトライ回数制限内であれば、少し待機してから再実行する
+            # リトライ回数制限を超えていたら終了、超えていなければ少し待って再試行
             if CURRENT_RETRY_COUNT >= MAX_RETRY_COUNT:
-                raise
+                print(f"リトライ上限に達しました: {e}", file=sys.stderr)
+                sys.exit(1)
 
             time.sleep(2**CURRENT_RETRY_COUNT)
 

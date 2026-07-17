@@ -2,8 +2,8 @@ name: Daily AI News
 
 on:
   schedule:
-    # UTC基準/06:00 JST(+9h)
-    - cron: "0 21 * * *"
+    # UTC基準/04:00 JST(+9h)
+    - cron: "0 19 * * *"
   workflow_dispatch: {}  # 手動実行用
 
 jobs:

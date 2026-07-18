@@ -5,14 +5,14 @@
 
 ## 特徴
 
-- `user_profile` に書かれたプロフィール内容をもとに、興味関心に合ったニュースを10件ピックアップ
+- `user_profile.md` に書かれたプロフィール内容をもとに、プロンプトを作成し、興味関心に合ったニュースを10件ピックアップ
 - Gemini（`gemini-3.1-flash-lite`）のFunction Callingを使い、必要に応じてTavily APIでリアルタイムWeb検索を実行
 - 生成された要約をDiscordのWebhookへ自動送信（2000文字超は自動分割）
 - API呼び出し失敗時は指数バックオフで最大5回リトライ
 
 ## 動作の流れ
 
-1. `user_profile` の内容と現在日付をプロンプトに埋め込み、Geminiに問い合わせ
+1. `user_profile.md` の内容と現在日付をプロンプトに埋め込み、Geminiに問い合わせ
 2. `web_search`関数（Tavily API）を呼び出して最新情報を取得（5回）
 3. 検索結果を踏まえて最終的な要約テキストを生成
 4. 生成結果をDiscord Webhookへ送信
@@ -37,7 +37,7 @@
 | `google-genai` | Gemini APIクライアント |
 | `tavily` | Tavily API（Web検索）クライアント |
 | `requests` | Discord Webhookへの送信 |
-| `python-dotenv` | `.env`ファイルからの環境変数読み込み |
+| `python-dotenv` | `.env`ファイルからの環境変数読み込み(ローカル実行用) |
 | `black` | コードフォーマッタ（開発時のみ使用、実行には不要） |
 
 ## 必要な環境変数
@@ -49,7 +49,7 @@
 | `GEMINI_API_KEY` | Google Gemini APIキー |
 | `TAVILY_API_KEY` | Tavily APIキー（Web検索用） |
 | `DISCORD_WEBHOOK` | 通知先DiscordチャンネルのWebhook URL |
-| `USER_PROFILE_PATH` | ユーザープロフィールファイルへのパス（例: `user_profile`） |
+
 
 ## ローカルでの実行方法
 
@@ -62,7 +62,6 @@ pip install -r requirements.txt
 # GEMINI_API_KEY=xxxx
 # TAVILY_API_KEY=xxxx
 # DISCORD_WEBHOOK=https://discord.com/api/webhooks/xxxx
-# USER_PROFILE_PATH=user_profile
 
 # 実行
 python app.py
@@ -87,11 +86,11 @@ python app.py
 
 ## 注意事項
 
-- 公開リポジトリで管理する場合、`user_profile`には興味関心のみを記載し、個人情報を含めないように注意してください。
+- 公開リポジトリで管理する場合、`user_profile.md`には興味関心のみを記載し、個人情報を含めないように注意してください。
 - APIキー・Webhook URLは**絶対にリポジトリに直接コミットしない**でください（Secretsや`.env`で管理し、`.gitignore`に含めることを推奨します）。
 
 ## 補足情報
 - Gemini APIは無料枠で運用する場合、新規発行のAPIキーでは一部モデルの使用が制限されたり、リクエスト過多でエラー落ちしたりすることがあります。  
 リクエスト過多の場合は最大5回までリトライをかけていますが、モデル利用不可の場合はリトライしても実行不可となる点にご留意ください。
 
-- 検索処理の実現については、Gemini API側に「グラウンディング機能」という内部検索機能が組み込まれていますが、2026年7月15日現在、無料枠だとまともに使えない（クレジット割り当てが枯渇してエラーになる）ため、別途Tavily（AI用検索API）を呼び出す形式にすることで対処しました。
+- 検索処理の実現については、Gemini API側に「グラウンディング機能」という内部検索機能が組み込まれていますが、2026年7月15日現在、無料枠だとまともに使えない（クレジット割り当てが枯渇してエラーになる）ため、別途Tavily（AI用検索API）を呼び出す形式にすることで対処しています。

@@ -14,7 +14,9 @@ load_dotenv()
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
 DISCORD_WEBHOOK = os.getenv("DISCORD_WEBHOOK")
-USER_PROFILE = Path(os.getenv("USER_PROFILE_PATH")).read_text(encoding = "utf-8")
+USER_PROFILE_PATH = "user_profile.md"
+PROMPT_PATH = "prompt.md"
+USER_PROFILE = Path(USER_PROFILE_PATH).read_text(encoding = "utf-8")
 CURRENT_DATE = datetime.now().strftime("%Y年%m月%d日")
 
 # APIクライアント
@@ -22,26 +24,10 @@ GEMINI_CLIENT = genai.Client(api_key=GEMINI_API_KEY)
 SEARCH_CLIENT = TavilyClient(api_key=TAVILY_API_KEY)
 
 # プロンプト
-PROMPT = f"""
-    あなたは優秀なITアシスタントです。
-    以下のユーザープロフィールに基づき、
-    この人が今日最も興味を持ちそうな最新(特に24時間以内に発表されたものが望ましい)のニュースやトピックを【10個】【関心を幅広くカバーするように】ピックアップして、
-    2000文字程度で要約してください。
-
-    {USER_PROFILE}
-
-    現在の日付：
-    {CURRENT_DATE}
-
-    【出力フォーマット】
-    実行日時をyyyy/MM/ddで教えてください。
-    各ニュースは以下の形式で2000文字程度で解説してください。
-    
-    ■ [タイトル]
-    - 概要: （3行程度で分かりやすく要約）
-    - 出典URL：(必ず記載し、特にURLの記載を忘れないでください。[出典名](ページのURL)の形式で記載してください。)
-    - なぜおすすめか: （ユーザーの興味とどう関連しているか）
-    """
+PROMPT = Path(PROMPT_PATH).read_text(encoding = "utf-8").format(
+    USER_PROFILE=USER_PROFILE,
+    CURRENT_DATE=CURRENT_DATE, 
+)
 
 
 def web_search(query: str, max_results: int = 5) -> dict:
@@ -115,15 +101,26 @@ def send_to_discord(webhook_url: str, content: str):
     """
     # discordは一度に2000字以上送れないため、1900字ずつ分割送信する
     chunk_length = 1900
-    for i in range(0, len(content), chunk_length):
-        chunk = content[i : i + chunk_length]
+    chunks = []
+    current_processing_chunk = ""
+    for line in content.splitlines(True):
+        if len(current_processing_chunk) + len(line) > 1900:
+            # 今回の行を追加すると1900文字を超える場合、処理中のひとまとまり（チャンク）を保存し、新たに次のまとまりを作る
+            chunks.append(current_processing_chunk)
+            current_processing_chunk = line
+        else:
+            current_processing_chunk += line
+
+    if current_processing_chunk:
+        chunks.append(current_processing_chunk)
+    
+    for chunk in chunks:
         payload = {"content": chunk}
         response = requests.post(webhook_url, json=payload)
         time.sleep(0.5)
         if response.status_code not in (200, 204):
             print(f"Discord送信エラー: {response.status_code} {response.text}")
             raise RuntimeError("Discord送信時にエラーが発生しました")
-
 
 def ask_gemini():
 
